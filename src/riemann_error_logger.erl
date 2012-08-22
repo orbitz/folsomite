@@ -67,7 +67,6 @@ node_prefix() ->
 
 send_stats(State, Data)->
     Hostname = net_adm:localhost(),
-    Prefix = State#state.node_prefix ++ ".",
-    zeta:cv({Hostname, Prefix ++ "Erlang_crash"}, 1, critical,
+    Prefix = State#state.node_prefix ++ " ",
+    zeta:cv({Hostname, Prefix ++ "erlang crash"}, 1, critical,
             [{tags,["transient", "erlang"]},{description, Data}]).
-    
