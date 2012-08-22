@@ -40,9 +40,6 @@ handle_call(_Request, State) ->
 handle_event({error, _GL, {_Pid, _FMT, Data}}, State) ->
     send_stats(State, Data),
     {ok, State};
-handle_event({error_report, _GL, {_Pid, std_error, Data}}, State) ->
-    send_stats(State, Data),
-    {ok, State};
 handle_event({error_report, _GL, {_Pid, _Type, Data}}, State) ->
     send_stats(State, Data),
     {ok, State};
