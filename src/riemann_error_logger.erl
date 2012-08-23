@@ -63,7 +63,8 @@ node_prefix() ->
     A.
 
 send_stats(State, Data)->
+    {FmtData, _Used} = lager_trunc_io:safe(Data,250),
     Hostname = net_adm:localhost(),
     Prefix = State#state.node_prefix ++ " ",
     zeta:cv({Hostname, Prefix ++ "erlang crash"}, 1, critical,
-            [{tags,["transient", "erlang"]},{description, Data}]).
+            [{tags,["transient", "erlang"]},{description, FmtData}]).
