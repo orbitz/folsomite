@@ -35,7 +35,7 @@ init(_) ->
     {ok, State}.
 
 handle_call(_Request, State) ->
-    Reply = unexpected,
+    Reply = ok,
     {ok, Reply, State}.
 
 handle_event({error, _GL, {_Pid, FMT, Data}}, State) ->
@@ -47,7 +47,7 @@ handle_event({error, _GL, {_Pid, FMT, Data}}, State) ->
         "** gen_event handler"++_ ->
             send_stats(State, Data);
         _ ->
-    {ok, State}
+            {ok, State}
     end;
 handle_event(_Event, State) ->
     {ok, State}.
