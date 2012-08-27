@@ -35,14 +35,20 @@ init(_) ->
     {ok, State}.
 
 handle_call(_Request, State) ->
-    {ok, ok, State}.
+    Reply = unexpected,
+    {ok, Reply, State}.
 
-handle_event({error, _GL, {_Pid, _FMT, Data}}, State) ->
-    send_stats(State, Data),
-    {ok, State};
-handle_event({error_report, _GL, {_Pid, _Type, Data}}, State) ->
-    send_stats(State, Data),
-    {ok, State};
+handle_event({error, _GL, {_Pid, FMT, Data}}, State) ->
+    case FMT of
+        "** Generic server "++_ ->
+            send_stats(State, Data);
+        "** State machine "++_ ->
+            send_stats(State, Data);
+        "** gen_event handler"++_ ->
+            send_stats(State, Data);
+        _ ->
+    {ok, State}
+    end;
 handle_event(_Event, State) ->
     {ok, State}.
 
@@ -63,7 +69,8 @@ node_prefix() ->
     A.
 
 send_stats(State, Data)->
-    FmtData = string:substring(1, 1000, Data),
+    Sdata = lists:flatten(Data),
+    FmtData = string:substr(Sdata, 1, 1000),
     Hostname = net_adm:localhost(),
     Prefix = State#state.node_prefix ++ " ",
     zeta:cv({Hostname, Prefix ++ "erlang crash"}, 1, critical,
