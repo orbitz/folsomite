@@ -73,7 +73,7 @@ node_prefix() ->
     A.
 
 send_stats(State, Data)->
-    Sdata = lists:flatten(Data),
+    Sdata = lists:flatten(io_lib:write(Data)),
     FmtData = string:substr(Sdata, 1, 1000),
     Hostname = net_adm:localhost(),
     Prefix = State#state.node_prefix ++ " ",
