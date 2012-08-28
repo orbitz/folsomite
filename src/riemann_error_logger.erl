@@ -35,7 +35,7 @@ init(_) ->
     {ok, State}.
 
 handle_call(_Request, State) ->
-    Reply = ok,
+    Reply = not_ok,
     {ok, Reply, State}.
 
 handle_event({error, _GL, {_Pid, FMT, Data}}, State) ->
@@ -49,6 +49,9 @@ handle_event({error, _GL, {_Pid, FMT, Data}}, State) ->
         _ ->
             {ok, State}
     end;
+handle_event({error_report, _GL, {_Pid, _Type, Data}}, State) ->
+    send_stats(State, Data),
+    {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
 
