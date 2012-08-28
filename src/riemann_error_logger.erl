@@ -35,8 +35,7 @@ init(_) ->
     {ok, State}.
 
 handle_call(_Request, State) ->
-    Reply = not_ok,
-    {ok, Reply, State}.
+    {ok, not_ok, State}.
 
 handle_event({error, _GL, {_Pid, Fmt,Data}}, State) ->
     case Fmt of
