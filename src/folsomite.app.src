@@ -10,7 +10,6 @@
   {applications, [kernel,
                   stdlib,
                   folsom,
-                  lager,
                   zeta
                  ]},
   {mod, {folsomite_app, no_arg}},
