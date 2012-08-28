@@ -38,8 +38,8 @@ handle_call(_Request, State) ->
     Reply = not_ok,
     {ok, Reply, State}.
 
-handle_event({error, _GL, {_Pid, FMT, Data}}, State) ->
-    case FMT of
+handle_event({error, _GL, {_Pid, Fmt,Data}}, State) ->
+    case Fmt of
         "** Generic server "++_ ->
             send_stats(State, Data);
         "** State machine "++_ ->
@@ -47,13 +47,15 @@ handle_event({error, _GL, {_Pid, FMT, Data}}, State) ->
         "** gen_event handler"++_ ->
             send_stats(State, Data);
         _ ->
-            {ok, State}
-    end;
-handle_event({error_report, _GL, {_Pid, _Type, Data}}, State) ->
+            ok
+    end,
+    {ok, State};
+handle_event({error_report, _GL, {_Pid, crash_report, [_Self, Data]}}, State) ->
     send_stats(State, Data),
     {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
+
 
 handle_info(_Info, State) ->
     {ok, State}.
