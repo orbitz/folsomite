@@ -49,8 +49,8 @@ handle_event({error, _GL, {_Pid, Fmt,Data}}, State) ->
             ok
     end,
     {ok, State};
-handle_event({error_report, _GL, {_Pid, crash_report, [_Self, Data]}}, State) ->
-    send_stats(State, Data),
+handle_event({error_report, _G, {_Pid, crash_report, [Self, _Neigb]}}, State) ->
+    send_stats(State, Self),
     {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
@@ -73,7 +73,7 @@ node_prefix() ->
     A.
 
 send_stats(State, Data)->
-    Sdata = lists:flatten(io_lib:write(Data)),
+    Sdata = lists:flatten(io_lib:format("~p",[Data])),
     FmtData = string:substr(Sdata, 1, 1000),
     Hostname = net_adm:localhost(),
     Prefix = State#state.node_prefix ++ " ",
