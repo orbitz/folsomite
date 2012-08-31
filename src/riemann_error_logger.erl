@@ -37,20 +37,14 @@ init(_) ->
 handle_call(_Request, State) ->
     {ok, not_ok, State}.
 
-handle_event({error, _GL, {_Pid, Fmt,Data}}, State) ->
+handle_event({error, _GL, {_Pid, Fmt,_Data}}, State) ->
     case Fmt of
         "** Generic server "++_ ->
-            [_Name, _Msg, _State, Reason] = Data,
-            FmtData = "Generic server crash" ++ format_reason(Reason),
-            send_stats(State, FmtData);
+            send_stats(State, Fmt);
         "** State machine "++_ ->
-            [_Name, _Msg, _State, Reason] = Data,
-            FmtData = "State machine crash" ++ format_reason(Reason),
-            send_stats(State, FmtData);
+            send_stats(State, Fmt);
         "** gen_event handler"++_ ->
-            [_Name, _Msg, _State, Reason] = Data,
-            FmtData = "Gen_event crash" ++ format_reason(Reason),
-            send_stats(State, FmtData);
+            send_stats(State, Fmt);
         _ ->
             ok
     end,
@@ -86,5 +80,3 @@ send_stats(State, Data)->
     zeta:cv({Hostname, Prefix ++ "erlang crash"}, 1, critical,
             [{tags,["transient", "erlang"]},{description, FmtData}]).
 
-format_reason(Reason)->
-    lists:flatten(io_lib:format("~p",[Reason])).
