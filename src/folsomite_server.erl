@@ -111,7 +111,7 @@ send_stats(State) ->
     Events =
         [zeta:ev({Hostname, Prefix ++ K}, V, ok, [{tags, [folsomite]}]) ||
                  {K, V} <- Metrics],
-    zeta:cv_batch(Events),
+    zeta:sv_batch(Events),
     Message = [format1(State#state.node_key, M, Timestamp) || M <- Metrics],
     case folsomite_graphite_client_sup:get_client() of
         {ok, Socket} -> folsomite_graphite_client:send(Socket, Message);
