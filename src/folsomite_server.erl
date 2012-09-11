@@ -69,7 +69,9 @@ handle_info(Info, State) ->
 
 terminate(normal, #state{timer_ref = Ref} = State) ->
     erlang:cancel_timer(Ref),
-    Terminate = prepare_event(State, "heartbeat", 1, [terminate]),
+    Hostname = net_adm:localhost(),
+    Prefix = State#state.node_prefix,
+    Terminate = prepare_event(Hostname, Prefix, "heartbeat", 1, [terminate]),
     zeta:sv_batch(Terminate).
 
 code_change(_, State, _) -> {ok, State}.
@@ -112,9 +114,11 @@ expand(X, NamePrefix) ->
 send_stats(State) ->
     Metrics = get_stats(),
     Timestamp = num2str(unixtime()),
-    Heartbeat = prepare_event(State, "heartbeat", 1, []),
+    Hostname = net_adm:localhost(),
+    Prefix = State#state.node_prefix,
+    Heartbeat = prepare_event(Hostname, Prefix, "heartbeat", 1, []),
     Events =
-        [Heartbeat|[prepare_event(State, K, V, [transient]) ||
+        [Heartbeat|[prepare_event(Hostname, Prefix, K, V, [transient]) ||
             {K, V} <- Metrics]],
     zeta:sv_batch(Events),
     Message = [format1(State#state.node_key, M, Timestamp) || M <- Metrics],
@@ -123,9 +127,7 @@ send_stats(State) ->
         {error, _} = Error -> Error
     end.
 
-prepare_event(State, K, V, Tags) ->
-    Hostname = net_adm:localhost(),
-    Prefix = State#state.node_prefix,
+prepare_event(Hostname, Prefix, K, V, Tags) ->
     zeta:ev({Hostname, Prefix ++ " " ++ K}, V, ok, [{tags, [folsomite|Tags]}]).
 
 format1(Base, {K, V}, Timestamp) ->
