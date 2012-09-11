@@ -33,6 +33,7 @@
 
 %% management api
 start_link() ->
+    process_flag(trap_exit, true),
     gen_server:start_link({local, ?MODULE}, ?MODULE, no_arg, []).
 
 %% gen_server callbacks
@@ -59,11 +60,17 @@ handle_info({timeout, _R, ?TIMER_MSG},
     F = fun() -> send_stats(State) end,
     folsom_metrics:histogram_timed_update({?APP, send_stats}, F),
     {noreply, State#state{timer_ref = Ref}};
+handle_info({'EXIT', _, _} = Exit, State) ->
+    {stop, {exit, Exit}, State};
 handle_info(Info, State) ->
     unexpected(info, Info),
     {noreply, State}.
 
-terminate(_, _) -> ok.
+
+terminate(normal, #state{timer_ref = Ref} = State) ->
+    erlang:cancel_timer(Ref),
+    Terminate = prepare_event(State, "heartbeat", 1, [terminate]),
+    zeta:sv_batch(Terminate).
 
 code_change(_, State, _) -> {ok, State}.
 
@@ -102,21 +109,24 @@ expand(X, NamePrefix) ->
     K = string:join(lists:map(fun a2l/1, lists:reverse(NamePrefix)), " "),
     [{K, X}].
 
-
 send_stats(State) ->
     Metrics = get_stats(),
     Timestamp = num2str(unixtime()),
-    Hostname = net_adm:localhost(),
-    Prefix = State#state.node_prefix ++ " ",
+    Heartbeat = prepare_event(State, "heartbeat", 1, []),
     Events =
-        [zeta:ev({Hostname, Prefix ++ K}, V, ok, [{tags, [folsomite]}]) ||
-                 {K, V} <- Metrics],
+        [Heartbeat|[prepare_event(State, K, V, [transient]) ||
+            {K, V} <- Metrics]],
     zeta:sv_batch(Events),
     Message = [format1(State#state.node_key, M, Timestamp) || M <- Metrics],
     case folsomite_graphite_client_sup:get_client() of
         {ok, Socket} -> folsomite_graphite_client:send(Socket, Message);
         {error, _} = Error -> Error
     end.
+
+prepare_event(State, K, V, Tags) ->
+    Hostname = net_adm:localhost(),
+    Prefix = State#state.node_prefix,
+    zeta:ev({Hostname, Prefix ++ " " ++ K}, V, ok, [{tags, [folsomite|Tags]}]).
 
 format1(Base, {K, V}, Timestamp) ->
     ["folsomite.", Base, ".", space2dot(K), " ", a2l(V), " ", Timestamp, "\n"].
