@@ -33,11 +33,11 @@
 
 %% management api
 start_link() ->
-    process_flag(trap_exit, true),
     gen_server:start_link({local, ?MODULE}, ?MODULE, no_arg, []).
 
 %% gen_server callbacks
 init(no_arg) ->
+    process_flag(trap_exit, true),
     FlushInterval = get_env(flush_interval),
     Ref = erlang:start_timer(FlushInterval, self(), ?TIMER_MSG),
     State = #state{flush_interval = FlushInterval,
@@ -66,13 +66,14 @@ handle_info(Info, State) ->
     unexpected(info, Info),
     {noreply, State}.
 
-
-terminate(normal, #state{timer_ref = Ref} = State) ->
+terminate(shutdown, #state{timer_ref = Ref} = State) ->
     erlang:cancel_timer(Ref),
     Hostname = net_adm:localhost(),
     Prefix = State#state.node_prefix,
     Terminate = prepare_event(Hostname, Prefix, "heartbeat", 1, [terminate]),
-    zeta:sv_batch(Terminate).
+    zeta:sv_batch([Terminate]);
+
+terminate(_, _) -> ok.
 
 code_change(_, State, _) -> {ok, State}.
 
