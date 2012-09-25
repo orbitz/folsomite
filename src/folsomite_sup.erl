@@ -9,6 +9,9 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%
+%% Changes:
+%%   - Removed all starting of backends
 
 -module(folsomite_sup).
 -behaviour(supervisor).
@@ -21,16 +24,10 @@ start_link() ->
 
 %% Supervisor callbacks
 init(no_arg) ->
-    GraphiteClientSup = {folsomite_graphite_client_sup,
-                         {folsomite_graphite_client_sup, start_link, []},
-                         permanent,
-                         1000,
-                         supervisor,
-                         [egraphite_corral]},
-    Worker = {folsomite_server,
+    Server = {folsomite_server,
               {folsomite_server, start_link, []},
               permanent,
               1000,
               worker,
               [folsomite_server]},
-    {ok, {{one_for_all, 5, 3600}, [GraphiteClientSup, Worker]}}.
+    {ok, {{one_for_all, 5, 3600}, [Server]}}.
