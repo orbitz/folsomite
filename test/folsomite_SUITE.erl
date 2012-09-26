@@ -31,6 +31,7 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% Defines
+-define(TABLE, foo_table).
 
 %% Flush every second
 -define(FLUSH_INTERVAL, 1).
@@ -45,7 +46,8 @@ init_per_suite(Config) ->
     application:set_env(folsomite, flush_seconds, ?FLUSH_INTERVAL),
     application:set_env(folsomite,
                         backends,
-                        [{folsomite_test_backend, [foo_table]}]),
+                        [ {folsomite_test_backend, [?TABLE]}
+                        ]),
     ok = application:start(folsom),
     ok = application:start(folsomite),
     Config.
@@ -68,14 +70,14 @@ add_counter({init, Config}) ->
     Config;
 add_counter({'end', Config}) ->
     Config;
-add_counter(Config) ->
+add_counter(_Config) ->
     [{folsomite, send_metrics}] = folsom_metrics:get_metrics(),
     folsom_metrics:notify(foo, {inc, 1}, counter),
     [foo, {folsomite, send_metrics}] = lists:sort(
                                          folsom_metrics:get_metrics()),
     %% Yes yes, EVIL
     timer:sleep(2000),
-    All  = ets:foldl(fun (E, Acc) -> [E | Acc] end, [], foo_table),
+    All  = ets:foldl(fun (E, Acc) -> [E | Acc] end, [], ?TABLE),
     Last = hd(lists:reverse(lists:sort(All))),
     ct:pal("~p~n", [Last]),
     ok.
