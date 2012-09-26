@@ -78,8 +78,8 @@ add_counter(_Config) ->
     %% Yes yes, EVIL
     timer:sleep(2000),
     All  = ets:foldl(fun (E, Acc) -> [E | Acc] end, [], ?TABLE),
-    Last = hd(lists:reverse(lists:sort(All))),
-    ct:pal("~p~n", [Last]),
+    {Timestamp, Metrics} = hd(lists:reverse(lists:sort(All))),
+    {"foo", 1} = proplists:lookup("foo", Metrics),
     ok.
 
 
