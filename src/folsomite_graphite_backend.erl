@@ -68,7 +68,7 @@ handle_cast({send_metrics, Timestamp, Metrics}, #s{sock=Sock} = S) ->
     ok = gen_tcp:send(Sock, format_msg(Timestamp, Metrics)),
     {noreply, S}.
 
-%%--------------------------------------------------------------------
+%%----o----------------------------------------------------------------
 %% @private
 %%--------------------------------------------------------------------
 handle_info(timeout, S) ->
@@ -97,9 +97,9 @@ code_change(_OldVsn, S, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 format_msg(Timestamp, Metrics) ->
-    [ [ "folsomite.", node_key(), ".", folsomite_utils:space2dot(K)
+    [ [ "folsomite.", node_key(), ".", key(K)
       , " "
-      , folsomite_utils:any2l(V)
+      , folsomite_utils:scalar2str(V)
       , " "
       , Timestamp
       , "\n"
@@ -111,3 +111,29 @@ node_key() ->
     NodeList = atom_to_list(node()),
     Opts     = [global, {return, list}],
     re:replace(NodeList, "[\@\.]", "_", Opts).
+
+key(K) ->
+    ct:pal("~p~n", [K]),
+    ct:pal("~p~n", [key1(K)]),
+    R = string:join(key1(K), "."),
+    ct:pal("~p~n", [R]),
+    R.
+
+key1([])       -> [];
+key1([X | Xs]) ->
+    one_deep(X)  ++ key1(Xs).
+
+one_deep(X) when is_list(X)    -> list_deep(X);
+one_deep(X) when is_tuple(X)   -> lists:map(fun two_deep/1, tuple_to_list(X));
+one_deep(X)                    -> [two_deep(X)].
+
+%% Handle strings or lists of other things, maybe...
+list_deep([X | _Xs] = L) when is_integer(X) ->
+    [L];
+list_deep(L) ->
+    lists:map(fun two_deep/1, L).
+
+
+two_deep(X) when is_integer(X) -> integer_to_list(X);
+two_deep(X) when is_float(X)   -> float_to_list(X);
+two_deep(X) when is_atom(X)    -> atom_to_list(X).

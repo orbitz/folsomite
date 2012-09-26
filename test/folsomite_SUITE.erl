@@ -47,6 +47,7 @@ init_per_suite(Config) ->
     application:set_env(folsomite,
                         backends,
                         [ {folsomite_test_backend, [?TABLE]}
+                        , {folsomite_graphite_backend, ["localhost", 1025]}
                         ]),
     ok = application:start(folsom),
     ok = application:start(folsomite),
@@ -72,14 +73,13 @@ add_counter({'end', Config}) ->
     Config;
 add_counter(_Config) ->
     [{folsomite, send_metrics}] = folsom_metrics:get_metrics(),
-    folsom_metrics:notify(foo, {inc, 1}, counter),
-    [foo, {folsomite, send_metrics}] = lists:sort(
-                                         folsom_metrics:get_metrics()),
+    folsom_metrics:notify([foo, bar], {inc, 1}, counter),
+    true = lists:member([foo, bar], folsom_metrics:get_metrics()),
     %% Yes yes, EVIL
     timer:sleep(2000),
     All  = ets:foldl(fun (E, Acc) -> [E | Acc] end, [], ?TABLE),
     {Timestamp, Metrics} = hd(lists:reverse(lists:sort(All))),
-    {"foo", 1} = proplists:lookup("foo", Metrics),
+    {[[foo, bar]], 1} = proplists:lookup([[foo, bar]], Metrics),
     ok.
 
 

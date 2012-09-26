@@ -113,8 +113,8 @@ code_change(_, S, _) -> {ok, S}.
 %%% Internal functions
 %%%===================================================================
 get_stats() ->
-    Memory  = expand0(folsom_vm_metrics:get_memory(), [memory, vm]),
-    Stats   = expand0(folsom_vm_metrics:get_statistics(), [vm]),
+    Memory  = flatten(folsom_vm_metrics:get_memory(), [vm, memory]),
+    Stats   = flatten(folsom_vm_metrics:get_statistics(), [vm]),
     Metrics = folsom_metrics:get_metrics_info(),
     Memory ++ Stats ++ lists:flatmap(fun expand_metric/1, Metrics).
 
@@ -131,19 +131,19 @@ expand_metric({Name, [{type, Type}]}) ->
                     false -> []
                 end
         end,
-    expand0(M, [Name]);
+    flatten(M, [Name]);
 expand_metric(_) ->
     [].
 
-expand0(M, NamePrefix) -> lists:flatten(expand(M, NamePrefix)).
-
-expand({K, X}, NamePrefix) ->
-    expand(X, [K | NamePrefix]);
-expand([_|_] = Xs, NamePrefix) ->
-    [expand(X, NamePrefix) || X <- Xs];
-expand(X, NamePrefix) ->
-    K = string:join(lists:map(fun folsomite_utils:any2l/1, lists:reverse(NamePrefix)), " "),
-    [{K, X}].
+flatten([], _Name) ->
+    [];
+flatten([{K, V} | Rest], Name) ->
+    KV = flatten(V, Name ++ [K]),
+    KV ++ flatten(Rest, Name);
+flatten({K, V}, Name) ->
+    [{Name ++ [K], V}];
+flatten(V, Name) ->
+    [{Name, V}].
 
 send_metrics(S) ->
     Metrics   = get_stats(),
