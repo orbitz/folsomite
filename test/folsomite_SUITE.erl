@@ -47,7 +47,6 @@ init_per_suite(Config) ->
     application:set_env(folsomite,
                         backends,
                         [ {folsomite_test_backend, [?TABLE]}
-                        , {folsomite_graphite_backend, ["localhost", 1025]}
                         ]),
     ok = application:start(folsom),
     ok = application:start(folsomite),
