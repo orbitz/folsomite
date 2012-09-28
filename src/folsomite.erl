@@ -22,10 +22,10 @@ start() -> ensure_started([folsom, folsomite]).
 %% internal
 
 ensure_started(Apps) ->
-    lists:iter(fun (App) ->
+    lists:foreach(fun (App) ->
                        case application:start(App) of
                            ok                   -> ok;
                            {already_started, _} -> ok
                        end
-               end,
-               Apps).
+                  end,
+                  Apps).
