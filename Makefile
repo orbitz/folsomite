@@ -15,7 +15,7 @@ check:
 
 test:
 	./rebar eunit
-
+	./rebar ct
 
 clean:
 	./rebar clean
