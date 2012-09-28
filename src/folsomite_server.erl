@@ -15,6 +15,16 @@
 
 %%%-------------------------------------------------------------------
 %%% @doc Periodically dump reports from folsom metrics to backends
+%%% Backends must have a start_link and send_metrics function.
+%%% start_link([any()]) -> {ok, pid()}
+%%% send_metrics(pid(), string(), metrics()) -> ok
+%%%
+%%% Where the string() is a string representation of the timestamp
+%%% metrics() looks like:
+%%% [{[k1, k2, ..., kn], any()} | ...]
+%%%
+%%% Where kN can be an atom, string, tuple of atom or string, or list
+%%% of tuple or string.
 %%% @end
 %%%-------------------------------------------------------------------
 
