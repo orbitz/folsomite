@@ -113,11 +113,7 @@ node_key() ->
     re:replace(NodeList, "[\@\.]", "_", Opts).
 
 key(K) ->
-    ct:pal("~p~n", [K]),
-    ct:pal("~p~n", [key1(K)]),
-    R = string:join(key1(K), "."),
-    ct:pal("~p~n", [R]),
-    R.
+    string:join(key1(K), ".").
 
 key1([])       -> [];
 key1([X | Xs]) ->
