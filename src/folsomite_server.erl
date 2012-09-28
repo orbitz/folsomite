@@ -9,79 +9,122 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%
+%% Changes
+%%   - Removed specific calls to graphite/reimann, now supports backends
 
-%%% periodically dump reports of folsom metrics to graphite
+%%%-------------------------------------------------------------------
+%%% @doc Periodically dump reports from folsom metrics to backends
+%%% Backends must have a start_link and send_metrics function.
+%%% start_link([any()]) -> {ok, pid()}
+%%% send_metrics(pid(), string(), metrics()) -> ok
+%%%
+%%% Where the string() is a string representation of the timestamp
+%%% metrics() looks like:
+%%% [{[k1, k2, ..., kn], any()} | ...]
+%%%
+%%% Where kN can be an atom, string, tuple of atom or string, or list
+%%% of tuple or string.
+%%% @end
+%%%-------------------------------------------------------------------
+
 -module(folsomite_server).
 -behaviour(gen_server).
 
-%% management api
+%% API
 -export([start_link/0]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         code_change/3, terminate/2]).
+-export([ init/1
+        , handle_call/3
+        , handle_cast/2
+        , handle_info/2
+        , code_change/3
+        , terminate/2
+        ]).
 
 
 -define(APP, folsomite).
 -define(TIMER_MSG, '#flush').
 
--record(state, {flush_interval :: integer(),
-                node_key       :: string(),
-                node_prefix    :: string(),
-                timer_ref      :: reference()}).
+-record(s, { flush_interval  :: integer()
+           , backends        :: [{module(), pid()}]
+           , timer_ref       :: reference()
+           }).
 
 
-%% management api
+%%%===================================================================
+%%% API
+%%%===================================================================
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, no_arg, []).
 
-%% gen_server callbacks
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%%--------------------------------------------------------------------
 init(no_arg) ->
-    process_flag(trap_exit, true),
-    FlushInterval = get_env(flush_interval),
-    Ref = erlang:start_timer(FlushInterval, self(), ?TIMER_MSG),
-    State = #state{flush_interval = FlushInterval,
-                   node_key = node_key(),
-                   node_prefix = node_prefix(),
-                   timer_ref = Ref},
+    FlushInterval = get_env(?APP, flush_seconds) * 1000,
+    Backends      = [ begin
+                          Pid = M:start_link(Args),
+                          {M, Pid}
+                      end
+                      || {M, Args} <- get_backends(?APP)],
+    Ref           = erlang:start_timer(FlushInterval,
+                                       self(),
+                                       ?TIMER_MSG),
+    State         = #s{ flush_interval = FlushInterval
+                      , backends       = Backends
+                      , timer_ref      = Ref
+                      },
     {ok, State}.
 
-handle_call(Call, _, State) ->
-    unexpected(call, Call),
-    {noreply, State}.
+%%--------------------------------------------------------------------
+%% @private
+%%--------------------------------------------------------------------
+handle_call(_Call, _From, S) ->
+    {stop, bad_call, S}.
 
-handle_cast(Cast, State) ->
-    unexpected(cast, Cast),
-    {noreply, State}.
+%%--------------------------------------------------------------------
+%% @private
+%%--------------------------------------------------------------------
+handle_cast(_Cast, S) ->
+    {stop, bad_cast, S}.
 
-handle_info({timeout, _R, ?TIMER_MSG},
-            #state{timer_ref = _R, flush_interval = FlushInterval} = State) ->
+%%--------------------------------------------------------------------
+%% @private
+%%--------------------------------------------------------------------
+handle_info({timeout, R, ?TIMER_MSG},
+            #s{ timer_ref = R
+              , flush_interval = FlushInterval} = S) ->
     Ref = erlang:start_timer(FlushInterval, self(), ?TIMER_MSG),
-    F = fun() -> send_stats(State) end,
-    folsom_metrics:histogram_timed_update({?APP, send_stats}, F),
-    {noreply, State#state{timer_ref = Ref}};
-handle_info({'EXIT', _, _} = Exit, State) ->
-    {stop, {exit, Exit}, State};
-handle_info(Info, State) ->
-    unexpected(info, Info),
-    {noreply, State}.
+    F   = fun() -> send_metrics(S) end,
+    folsom_metrics:histogram_timed_update({?APP, send_metrics}, F),
+    {noreply, S#s{timer_ref = Ref}}.
 
-terminate(shutdown, #state{timer_ref = Ref} = State) ->
+
+%%--------------------------------------------------------------------
+%% @private
+%%--------------------------------------------------------------------
+terminate(shutdown, #s{timer_ref = Ref}) ->
     erlang:cancel_timer(Ref),
-    Hostname = net_adm:localhost(),
-    Prefix = State#state.node_prefix,
-    Terminate = prepare_event(Hostname, Prefix, "heartbeat", 1, [terminate]),
-    zeta:sv_batch([Terminate]);
+    ok.
 
-terminate(_, _) -> ok.
-
-code_change(_, State, _) -> {ok, State}.
+%%--------------------------------------------------------------------
+%% @private
+%%--------------------------------------------------------------------
+code_change(_, S, _) -> {ok, S}.
 
 
-%% internal
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 get_stats() ->
-    Memory = expand0(folsom_vm_metrics:get_memory(), [memory, vm]),
-    Stats = expand0(folsom_vm_metrics:get_statistics(), [vm]),
+    Memory  = flatten(folsom_vm_metrics:get_memory(), [vm, memory]),
+    Stats   = flatten(folsom_vm_metrics:get_statistics(), [vm]),
     Metrics = folsom_metrics:get_metrics_info(),
     Memory ++ Stats ++ lists:flatmap(fun expand_metric/1, Metrics).
 
@@ -98,68 +141,40 @@ expand_metric({Name, [{type, Type}]}) ->
                     false -> []
                 end
         end,
-    expand0(M, [Name]);
+    flatten(M, [Name]);
 expand_metric(_) ->
     [].
 
-expand0(M, NamePrefix) -> lists:flatten(expand(M, NamePrefix)).
+flatten([], _Name) ->
+    [];
+flatten([{K, V} | Rest], Name) ->
+    KV = flatten(V, Name ++ [K]),
+    KV ++ flatten(Rest, Name);
+flatten({K, V}, Name) ->
+    [{Name ++ [K], V}];
+flatten(V, Name) ->
+    [{Name, V}].
 
-expand({K, X}, NamePrefix) ->
-    expand(X, [K | NamePrefix]);
-expand([_|_] = Xs, NamePrefix) ->
-    [expand(X, NamePrefix) || X <- Xs];
-expand(X, NamePrefix) ->
-    K = string:join(lists:map(fun a2l/1, lists:reverse(NamePrefix)), " "),
-    [{K, X}].
-
-send_stats(State) ->
-    Metrics = get_stats(),
+send_metrics(S) ->
+    Metrics   = get_stats(),
     Timestamp = num2str(unixtime()),
-    Hostname = net_adm:localhost(),
-    Prefix = State#state.node_prefix,
-    Heartbeat = prepare_event(Hostname, Prefix, "heartbeat", 1, []),
-    Events =
-        [Heartbeat|[prepare_event(Hostname, Prefix, K, V, [transient]) ||
-            {K, V} <- Metrics]],
-    zeta:sv_batch(Events),
-    Message = [format1(State#state.node_key, M, Timestamp) || M <- Metrics],
-    case folsomite_graphite_client_sup:get_client() of
-        {ok, Socket} -> folsomite_graphite_client:send(Socket, Message);
-        {error, _} = Error -> Error
-    end.
+    lists:foreach(fun ({M, Pid}) ->
+                          M:send_metrics(Pid, Timestamp, Metrics)
+                  end,
+                  S#s.backends).
 
-prepare_event(Hostname, Prefix, K, V, Tags) ->
-    zeta:ev({Hostname, Prefix ++ " " ++ K}, V, ok, [{tags, [folsomite|Tags]}]).
-
-format1(Base, {K, V}, Timestamp) ->
-    ["folsomite.", Base, ".", space2dot(K), " ", a2l(V), " ", Timestamp, "\n"].
 
 num2str(NN) -> lists:flatten(io_lib:format("~w",[NN])).
 unixtime()  -> {Meg, S, _} = os:timestamp(), Meg*1000000 + S.
 
-
-node_prefix() ->
-    NodeList = atom_to_list(node()),
-    [A, _] = string:tokens(NodeList, "@"),
-    A.
-
-node_key() ->
-    NodeList = atom_to_list(node()),
-    Opts = [global, {return, list}],
-    re:replace(NodeList, "[\@\.]", "_", Opts).
-
-
-a2l(X) when is_list(X) -> X;
-a2l(X) when is_atom(X) -> atom_to_list(X);
-a2l(X) when is_integer(X) -> integer_to_list(X);
-a2l(X) when is_float(X) -> float_to_list(X);
-a2l(X) when is_tuple(X) -> string:join([a2l(A) || A <- tuple_to_list(X)], " ").
-
-space2dot(X) -> string:join(string:tokens(X, " "), ".").
-
-get_env(Name) ->
-    {ok, Value} = application:get_env(?APP, Name),
+get_env(Application, Name) ->
+    {ok, Value} = application:get_env(Application, Name),
     Value.
 
-unexpected(Type, Message) ->
-    error_logger:info_msg(" unexpected ~p ~p~n", [Type, Message]).
+get_backends(Application) ->
+    lists:map(fun ({M, Args}) ->
+                      {M, Args};
+                  (M) ->
+                      {M, []}
+              end,
+              get_env(Application, backends)).
