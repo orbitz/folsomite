@@ -3,18 +3,15 @@
  [
   {description, "blow up your graphite / riemann server with folsom metrics"},
   {vsn, git},
-  {registered, [folsomite_sup,
-                folsomite_server,
-                folsomite_graphite_client_sup
+  {registered, [ folsomite_sup
+               , folsomite_server
                ]},
-  {applications, [kernel,
-                  stdlib,
-                  folsom,
-                  zeta
+  {applications, [ kernel
+                 , stdlib
+                 , folsom
                  ]},
   {mod, {folsomite_app, no_arg}},
-  {env, [{graphite_host, "localhost"},
-         {graphite_port, 2003},
-         {flush_interval, 60000}
+  {env, [ {flush_seconds, 5}
+        , {backends, []}
         ]}
  ]}.

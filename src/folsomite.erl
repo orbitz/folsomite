@@ -9,19 +9,23 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%
+%% Changes:
+%%   - Changed to ensure_started and folsom is started as well
 
 -module(folsomite).
 -export([start/0]).
 
 %% api
-start() -> start(folsomite).
+start() -> ensure_started([folsom, folsomite]).
 
 %% internal
-start(App) -> start_ok(App, application:start(App, permanent)).
-start_ok(_, ok) -> ok;
-start_ok(_App, {error, {already_started, _App}}) -> ok;
-start_ok(App, {error, {not_started, Dep}}) ->
-    ok = start(Dep),
-    start(App);
-start_ok(App, {error, Reason}) ->
-    erlang:error({app_start_failed, App, Reason}).
+
+ensure_started(Apps) ->
+    lists:foreach(fun (App) ->
+                       case application:start(App) of
+                           ok                   -> ok;
+                           {already_started, _} -> ok
+                       end
+                  end,
+                  Apps).
