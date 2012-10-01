@@ -11,8 +11,7 @@
                  , folsom
                  ]},
   {mod, {folsomite_app, no_arg}},
-  {env, [{graphite_host, "localhost"},
-         {graphite_port, 2003},
-         {flush_interval, 60000}
+  {env, [ {flush_seconds, 5}
+        , {backends, []}
         ]}
  ]}.

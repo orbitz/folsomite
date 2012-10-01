@@ -11,7 +11,7 @@
 %% limitations under the License.
 %%
 %% Changes
-%%   - Removed specific calls to graphite/reimann, now supports backends
+%%   - Removed specific calls to graphite/riemann, now supports backends
 
 %%%-------------------------------------------------------------------
 %%% @doc Periodically dump reports from folsom metrics to backends
