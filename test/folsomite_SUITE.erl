@@ -78,7 +78,7 @@ add_counter(_Config) ->
     folsom_metrics:notify([foo, bar], {inc, 1}, counter),
     true = lists:member([foo, bar], folsom_metrics:get_metrics()),
     %% Yes yes, EVIL
-    timer:sleep(2000),
+    timer:sleep(1000),
     All  = ets:foldl(fun (E, Acc) -> [E | Acc] end, [], ?TABLE),
     {_Timestamp, Metrics} = hd(lists:reverse(lists:sort(All))),
     {[[foo, bar]], 1} = proplists:lookup([[foo, bar]], Metrics),
