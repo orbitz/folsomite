@@ -18,9 +18,6 @@
 
 %% Application callbacks
 start(_Type, _Args) ->
-    folsom_metrics:new_histogram({folsomite, send_metrics},
-                                 slide_uniform,
-                                 {60, 1028}),
     folsomite_sup:start_link().
 
 stop(_) -> ok.

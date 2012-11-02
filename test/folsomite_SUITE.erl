@@ -48,6 +48,9 @@ init_per_suite(Config) ->
                         backends,
                         [ {folsomite_test_backend, [?TABLE]}
                         ]),
+    application:set_env(folsomite,
+                        send_timer_callback,
+                        folsomite_timer_dummy),
     ok = application:start(folsom),
     ok = application:start(folsomite),
     Config.
@@ -71,7 +74,7 @@ add_counter({init, Config}) ->
 add_counter({'end', Config}) ->
     Config;
 add_counter(_Config) ->
-    [{folsomite, send_metrics}] = folsom_metrics:get_metrics(),
+    [] = folsom_metrics:get_metrics(),
     folsom_metrics:notify([foo, bar], {inc, 1}, counter),
     true = lists:member([foo, bar], folsom_metrics:get_metrics()),
     %% Yes yes, EVIL
