@@ -102,7 +102,7 @@ handle_info({timeout, R, ?TIMER_MSG},
               , flush_interval = FlushInterval} = S) ->
     Ref = erlang:start_timer(FlushInterval, self(), ?TIMER_MSG),
     F   = fun() -> send_metrics(S) end,
-    folsom_metrics:histogram_timed_update({?APP, send_metrics}, F),
+    metrik:time([?APP, send_metrics], F),
     {noreply, S#s{timer_ref = Ref}}.
 
 
