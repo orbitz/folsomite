@@ -14,7 +14,7 @@ check:
 	./rebar dialyze
 
 test:
-	./rebar eunit
+	./rebar eunit skip_deps=true
 	./rebar ct
 
 clean:

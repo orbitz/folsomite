@@ -47,9 +47,10 @@
 -define(APP, folsomite).
 -define(TIMER_MSG, '#flush').
 
--record(s, { flush_interval  :: integer()
-           , backends        :: [{module(), pid()}]
-           , timer_ref       :: reference()
+-record(s, { flush_interval :: integer()
+           , backends       :: [{module(), pid()}]
+           , timer_ref      :: reference()
+           , send_timer     :: module()
            }).
 
 
@@ -76,9 +77,11 @@ init(no_arg) ->
     Ref           = erlang:start_timer(FlushInterval,
                                        self(),
                                        ?TIMER_MSG),
+    Send_timer    = get_env(?APP, send_timer_callback),
     State         = #s{ flush_interval = FlushInterval
                       , backends       = Backends
                       , timer_ref      = Ref
+                      , send_timer     = Send_timer
                       },
     {ok, State}.
 
@@ -101,8 +104,7 @@ handle_info({timeout, R, ?TIMER_MSG},
             #s{ timer_ref = R
               , flush_interval = FlushInterval} = S) ->
     Ref = erlang:start_timer(FlushInterval, self(), ?TIMER_MSG),
-    F   = fun() -> send_metrics(S) end,
-    folsom_metrics:histogram_timed_update({?APP, send_metrics}, F),
+    send_metrics(S),
     {noreply, S#s{timer_ref = Ref}}.
 
 
@@ -155,13 +157,15 @@ flatten({K, V}, Name) ->
 flatten(V, Name) ->
     [{Name, V}].
 
-send_metrics(S) ->
+send_metrics(#s{send_timer = Send_timer} = S) ->
     Metrics   = get_stats(),
     Timestamp = num2str(unixtime()),
-    lists:foreach(fun ({M, Pid}) ->
-                          M:send_metrics(Pid, Timestamp, Metrics)
-                  end,
-                  S#s.backends).
+    F = fun ({M, Pid}) ->
+                Send_timer:time(
+                  M,
+                  fun () -> M:send_metrics(Pid, Timestamp, Metrics) end)
+        end,
+    lists:foreach(F, S#s.backends).
 
 
 num2str(NN) -> lists:flatten(io_lib:format("~w",[NN])).
