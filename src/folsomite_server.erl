@@ -31,8 +31,6 @@
 -module(folsomite_server).
 -behaviour(gen_server).
 
--include_lib("tulib/include/logging.hrl").
-
 %% API
 -export([start_link/0]).
 
@@ -92,13 +90,15 @@ handle_cast(_Cast, S) ->
 handle_info({'EXIT', Pid, Reason}, #s{backends = Backends} = S) ->
     case lists:keyfind(Pid, 2, Backends) of
         {M, Pid} ->
-            ?info("folsomite: Backend died: ~p Reason: ~p",
-                  [M, Reason]),
+            error_logger:error_msg(
+              "folsomite: Backend died: ~p Reason: ~p",
+              [M, Reason]),
             Deleted = lists:keydelete(Pid, 2, Backends),
             {noreply, S#s{backends = Deleted}};
         false ->
-            ?info("folsomite: Unknown pid died: ~p Reason: ~p",
-                  [Pid, Reason]),
+            error_logger:error_msg(
+              "folsomite: Unknown pid died: ~p Reason: ~p",
+              [Pid, Reason]),
             {noreply, S}
     end;
 handle_info(?RESTART_MSG, S) ->
@@ -225,12 +225,13 @@ start_missing(RunningBackends, AllBackends, Missing) ->
 
 start_missing_backend(M, Args, Acc) ->
     try
-        ?info("folsomite: Starting backend ~p", [M]),
+        error_logger:info_msg("folsomite: Starting backend ~p", [M]),
         Pid = M:start_link(Args),
         [{M, Pid} | Acc]
     catch
         Type:Err ->
-            ?info("folsomite: Failed starting ~p Reason: ~p",
-                  [M, {Type, Err}]),
+            error_logger:error_msg(
+              "folsomite: Failed starting ~p Reason: ~p",
+              [M, {Type, Err}]),
             Acc
     end.
