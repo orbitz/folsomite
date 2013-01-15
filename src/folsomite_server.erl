@@ -46,11 +46,12 @@
 
 -define(APP, folsomite).
 -define(TIMER_MSG, '#flush').
+-define(RESTART_MSG, '#restart').
 
--record(s, { flush_interval :: integer()
-           , backends       :: [{module(), pid()}]
+-record(s, { backends       :: [{module(), pid()}]
            , timer_ref      :: reference()
            , send_timer     :: module()
+           , restart_ref    :: reference()
            }).
 
 
@@ -69,21 +70,21 @@ start_link() ->
 %%--------------------------------------------------------------------
 init(no_arg) ->
     erlang:process_flag(trap_exit, true),
-    FlushInterval = get_env(?APP, flush_seconds) * 1000,
-    Backends      = [ begin
-                          Pid = M:start_link(Args),
-                          {M, Pid}
-                      end
-                      || {M, Args} <- get_backends(?APP)],
-    Ref           = erlang:start_timer(FlushInterval,
-                                       self(),
-                                       ?TIMER_MSG),
-    Send_timer    = get_env(?APP, send_timer_callback),
-    State         = #s{ flush_interval = FlushInterval
-                      , backends       = Backends
-                      , timer_ref      = Ref
-                      , send_timer     = Send_timer
-                      },
+    FlushIntr   = get_env(?APP, flush_seconds) * 1000,
+    RestartIntr = get_env(?APP, backend_restart_seconds) * 1000,
+    Backends    = start_backends([]),
+    Ref         = timer:send_interval(FlushIntr,
+                                      self(),
+                                      ?TIMER_MSG),
+    Restart_ref = timer:send_interval(RestartIntr,
+                                      self(),
+                                      ?RESTART_MSG),
+    Send_timer  = get_env(?APP, send_timer_callback),
+    State       = #s{ backends       = Backends
+                    , timer_ref      = Ref
+                    , send_timer     = Send_timer
+                    , restart_ref    = Restart_ref
+                    },
     {ok, State}.
 
 %%--------------------------------------------------------------------
@@ -101,12 +102,12 @@ handle_cast(_Cast, S) ->
 %%--------------------------------------------------------------------
 %% @private
 %%--------------------------------------------------------------------
-handle_info({timeout, R, ?TIMER_MSG},
-            #s{ timer_ref = R
-              , flush_interval = FlushInterval} = S) ->
-    Ref = erlang:start_timer(FlushInterval, self(), ?TIMER_MSG),
+handle_info(?RESTART_MSG, S) ->
+    Backends = start_backends(S#s.backends),
+    {noreply, S{backends = Backends}};
+handle_info(?TIMER_MSG, S) ->
     send_metrics(S),
-    {noreply, S#s{timer_ref = Ref}}.
+    {noreply, S}.
 
 
 %%--------------------------------------------------------------------
@@ -183,3 +184,21 @@ get_backends(Application) ->
                       {M, []}
               end,
               get_env(Application, backends)).
+
+start_backends(Backends) ->
+    Module      = fun({M, _}) -> M end,
+    AllBackends = get_backends(?APP),
+    Missing     = sets:subtract(
+                    sets:from_list(lists:map(Module, AllBackends)),
+                    sets:from_list(lists:map(Module, Backends))),
+    Start       = fun({M, Args}, Acc) ->
+                          case sets:is_element(M, Missing) of
+                              true ->
+                                  Pid = M:start_links(Args),
+                                  [{M, Pid} | Acc];
+                              false ->
+                                  Acc
+                          end
+                  end,
+    %% Start the difference
+    lists:foldl(Start, Backends, AllBackends).
