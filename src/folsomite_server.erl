@@ -68,6 +68,7 @@ start_link() ->
 %% @private
 %%--------------------------------------------------------------------
 init(no_arg) ->
+    erlang:process_flag(trap_exit, true),
     FlushInterval = get_env(?APP, flush_seconds) * 1000,
     Backends      = [ begin
                           Pid = M:start_link(Args),
