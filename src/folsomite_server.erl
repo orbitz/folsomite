@@ -31,6 +31,8 @@
 -module(folsomite_server).
 -behaviour(gen_server).
 
+-include_lib("tulib/include/logging.hrl").
+
 %% API
 -export([start_link/0]).
 
@@ -102,9 +104,21 @@ handle_cast(_Cast, S) ->
 %%--------------------------------------------------------------------
 %% @private
 %%--------------------------------------------------------------------
+handle_info({'EXIT', Pid, Reason}, #s{backends = Backends} = S) ->
+    case lists:keyfind(Pid, 2, Backends) of
+        {M, Pid} ->
+            ?info("folsomite: Backend died: ~p Reason: ~p",
+                  [M, Reason]),
+            Deleted = lists:keydelete(Pid, 2, Backends),
+            {noreply, S#s{backends = Deleted}};
+        false ->
+            ?info("folsomite: Unknown pid died: ~p Reason: ~p",
+                  [Pid, Reason]),
+            {noreply, S}
+    end;
 handle_info(?RESTART_MSG, S) ->
     Backends = start_backends(S#s.backends),
-    {noreply, S{backends = Backends}};
+    {noreply, S#s{backends = Backends}};
 handle_info(?TIMER_MSG, S) ->
     send_metrics(S),
     {noreply, S}.
@@ -191,14 +205,18 @@ start_backends(Backends) ->
     Missing     = sets:subtract(
                     sets:from_list(lists:map(Module, AllBackends)),
                     sets:from_list(lists:map(Module, Backends))),
-    Start       = fun({M, Args}, Acc) ->
-                          case sets:is_element(M, Missing) of
-                              true ->
-                                  Pid = M:start_links(Args),
-                                  [{M, Pid} | Acc];
-                              false ->
-                                  Acc
-                          end
-                  end,
-    %% Start the difference
-    lists:foldl(Start, Backends, AllBackends).
+    start_missing(Backends, AllBackends, Missing).
+
+
+start_missing(RunningBackends, AllBackends, Missing) ->
+    F = fun({M, Args}, Acc) ->
+                case sets:is_element(M, Missing) of
+                    true ->
+                        ?info("folsomite: Starting backend ~p", [M]),
+                        Pid = M:start_links(Args),
+                        [{M, Pid} | Acc];
+                    false ->
+                        Acc
+                end
+        end,
+    lists:foldl(F, RunningBackends, AllBackends).
