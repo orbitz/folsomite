@@ -216,11 +216,21 @@ start_missing(RunningBackends, AllBackends, Missing) ->
     F = fun({M, Args}, Acc) ->
                 case sets:is_element(M, Missing) of
                     true ->
-                        ?info("folsomite: Starting backend ~p", [M]),
-                        Pid = M:start_links(Args),
-                        [{M, Pid} | Acc];
+                        start_missing_backend(M, Args, Acc);
                     false ->
                         Acc
                 end
         end,
     lists:foldl(F, RunningBackends, AllBackends).
+
+start_missing_backend(M, Args, Acc) ->
+    try
+        ?info("folsomite: Starting backend ~p", [M]),
+        Pid = M:start_link(Args),
+        [{M, Pid} | Acc]
+    catch
+        Type:Err ->
+            ?info("folsomite: Failed starting ~p Reason: ~p",
+                  [M, {Type, Err}]),
+            Acc
+    end.
