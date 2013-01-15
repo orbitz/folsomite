@@ -72,22 +72,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init(no_arg) ->
     erlang:process_flag(trap_exit, true),
-    FlushIntr   = get_env(?APP, flush_seconds) * 1000,
-    RestartIntr = get_env(?APP, backend_restart_seconds) * 1000,
-    Backends    = start_backends([]),
-    Ref         = timer:send_interval(FlushIntr,
-                                      self(),
-                                      ?TIMER_MSG),
-    Restart_ref = timer:send_interval(RestartIntr,
-                                      self(),
-                                      ?RESTART_MSG),
-    Send_timer  = get_env(?APP, send_timer_callback),
-    State       = #s{ backends       = Backends
-                    , timer_ref      = Ref
-                    , send_timer     = Send_timer
-                    , restart_ref    = Restart_ref
-                    },
-    {ok, State}.
+    {ok, undefined, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -121,8 +106,24 @@ handle_info(?RESTART_MSG, S) ->
     {noreply, S#s{backends = Backends}};
 handle_info(?TIMER_MSG, S) ->
     send_metrics(S),
-    {noreply, S}.
-
+    {noreply, S};
+handle_info(timeout, undefined) ->
+    FlushIntr   = get_env(?APP, flush_seconds) * 1000,
+    RestartIntr = get_env(?APP, backend_restart_seconds) * 1000,
+    Backends    = start_backends([]),
+    Ref         = timer:send_interval(FlushIntr,
+                                      self(),
+                                      ?TIMER_MSG),
+    Restart_ref = timer:send_interval(RestartIntr,
+                                      self(),
+                                      ?RESTART_MSG),
+    Send_timer  = get_env(?APP, send_timer_callback),
+    State       = #s{ backends       = Backends
+                    , timer_ref      = Ref
+                    , send_timer     = Send_timer
+                    , restart_ref    = Restart_ref
+                    },
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
