@@ -127,8 +127,11 @@ handle_info(?TIMER_MSG, S) ->
 %%--------------------------------------------------------------------
 %% @private
 %%--------------------------------------------------------------------
-terminate(shutdown, #s{timer_ref = Ref}) ->
-    erlang:cancel_timer(Ref),
+terminate(shutdown, #s{ timer_ref   = TimerRef
+                      , restart_ref = RestartRef
+                      }) ->
+    timer:cancel_timer(TimerRef),
+    timer:cancel_timer(RestartRef),
     ok.
 
 %%--------------------------------------------------------------------
