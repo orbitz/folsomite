@@ -46,11 +46,12 @@
 
 -define(APP, folsomite).
 -define(TIMER_MSG, '#flush').
+-define(RESTART_MSG, '#restart').
 
--record(s, { flush_interval :: integer()
-           , backends       :: [{module(), pid()}]
+-record(s, { backends       :: [{module(), pid()}]
            , timer_ref      :: reference()
            , send_timer     :: module()
+           , restart_ref    :: reference()
            }).
 
 
@@ -68,22 +69,8 @@ start_link() ->
 %% @private
 %%--------------------------------------------------------------------
 init(no_arg) ->
-    FlushInterval = get_env(?APP, flush_seconds) * 1000,
-    Backends      = [ begin
-                          Pid = M:start_link(Args),
-                          {M, Pid}
-                      end
-                      || {M, Args} <- get_backends(?APP)],
-    Ref           = erlang:start_timer(FlushInterval,
-                                       self(),
-                                       ?TIMER_MSG),
-    Send_timer    = get_env(?APP, send_timer_callback),
-    State         = #s{ flush_interval = FlushInterval
-                      , backends       = Backends
-                      , timer_ref      = Ref
-                      , send_timer     = Send_timer
-                      },
-    {ok, State}.
+    erlang:process_flag(trap_exit, true),
+    {ok, undefined, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -100,19 +87,52 @@ handle_cast(_Cast, S) ->
 %%--------------------------------------------------------------------
 %% @private
 %%--------------------------------------------------------------------
-handle_info({timeout, R, ?TIMER_MSG},
-            #s{ timer_ref = R
-              , flush_interval = FlushInterval} = S) ->
-    Ref = erlang:start_timer(FlushInterval, self(), ?TIMER_MSG),
+handle_info({'EXIT', Pid, Reason}, #s{backends = Backends} = S) ->
+    case lists:keyfind(Pid, 2, Backends) of
+        {M, Pid} ->
+            error_logger:error_msg(
+              "folsomite: Backend died: ~p Reason: ~p",
+              [M, Reason]),
+            Deleted = lists:keydelete(Pid, 2, Backends),
+            {noreply, S#s{backends = Deleted}};
+        false ->
+            error_logger:error_msg(
+              "folsomite: Unknown pid died: ~p Reason: ~p",
+              [Pid, Reason]),
+            {noreply, S}
+    end;
+handle_info(?RESTART_MSG, S) ->
+    Backends = start_backends(S#s.backends),
+    {noreply, S#s{backends = Backends}};
+handle_info(?TIMER_MSG, S) ->
     send_metrics(S),
-    {noreply, S#s{timer_ref = Ref}}.
-
+    {noreply, S};
+handle_info(timeout, undefined) ->
+    FlushIntr   = get_env(?APP, flush_seconds) * 1000,
+    RestartIntr = get_env(?APP, backend_restart_seconds) * 1000,
+    Backends    = start_backends([]),
+    Ref         = timer:send_interval(FlushIntr,
+                                      self(),
+                                      ?TIMER_MSG),
+    Restart_ref = timer:send_interval(RestartIntr,
+                                      self(),
+                                      ?RESTART_MSG),
+    Send_timer  = get_env(?APP, send_timer_callback),
+    State       = #s{ backends       = Backends
+                    , timer_ref      = Ref
+                    , send_timer     = Send_timer
+                    , restart_ref    = Restart_ref
+                    },
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
 %%--------------------------------------------------------------------
-terminate(shutdown, #s{timer_ref = Ref}) ->
-    erlang:cancel_timer(Ref),
+terminate(shutdown, #s{ timer_ref   = TimerRef
+                      , restart_ref = RestartRef
+                      }) ->
+    timer:cancel(TimerRef),
+    timer:cancel(RestartRef),
     ok.
 
 %%--------------------------------------------------------------------
@@ -182,3 +202,36 @@ get_backends(Application) ->
                       {M, []}
               end,
               get_env(Application, backends)).
+
+start_backends(Backends) ->
+    Module      = fun({M, _}) -> M end,
+    AllBackends = get_backends(?APP),
+    Missing     = sets:subtract(
+                    sets:from_list(lists:map(Module, AllBackends)),
+                    sets:from_list(lists:map(Module, Backends))),
+    start_missing(Backends, AllBackends, Missing).
+
+
+start_missing(RunningBackends, AllBackends, Missing) ->
+    F = fun({M, Args}, Acc) ->
+                case sets:is_element(M, Missing) of
+                    true ->
+                        start_missing_backend(M, Args, Acc);
+                    false ->
+                        Acc
+                end
+        end,
+    lists:foldl(F, RunningBackends, AllBackends).
+
+start_missing_backend(M, Args, Acc) ->
+    try
+        error_logger:info_msg("folsomite: Starting backend ~p", [M]),
+        Pid = M:start_link(Args),
+        [{M, Pid} | Acc]
+    catch
+        Type:Err ->
+            error_logger:error_msg(
+              "folsomite: Failed starting ~p Reason: ~p",
+              [M, {Type, Err}]),
+            Acc
+    end.

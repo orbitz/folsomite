@@ -12,6 +12,7 @@
                  ]},
   {mod, {folsomite_app, no_arg}},
   {env, [ {flush_seconds, 5}
+        , {backend_restart_seconds, 30}
         , {backends, []}
         ]}
  ]}.
