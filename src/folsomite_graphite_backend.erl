@@ -122,7 +122,7 @@ key(K) ->
 
 key1([])       -> [];
 key1([X | Xs]) ->
-    one_deep(X)  ++ key1(Xs).
+    one_deep(X) ++ key1(Xs).
 
 one_deep(X) when is_list(X)    -> list_deep(X);
 one_deep(X) when is_tuple(X)   -> lists:map(fun two_deep/1, tuple_to_list(X));
